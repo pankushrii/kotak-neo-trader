@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true
-  }
+  // no experimental.appDir needed in Next 14+
 };
 
 export default nextConfig;
