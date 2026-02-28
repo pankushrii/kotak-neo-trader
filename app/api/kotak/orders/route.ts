@@ -1,16 +1,31 @@
-import { NextResponse } from 'next/server';
+// app/api/kotak/quotes/route.ts
+export const runtime = 'nodejs';
 
-// Dummy in-memory orders storage
-let orders = [];
+import { NextRequest, NextResponse } from 'next/server';
+import { loadSession } from '@/lib/session';
+import { getQuotes } from '@/lib/kotakNeoClient';
 
-// POST endpoint to place orders
-export async function POST(req) {
-    const order = await req.json();
-    orders.push(order); // Store the order
-    return NextResponse.json({ message: 'Order placed successfully!', order }, { status: 201 });
-}
+export async function POST(req: NextRequest) {
+  const session = loadSession();
+  if (!session) {
+    return NextResponse.json({ error: 'No Kotak session' }, { status: 401 });
+  }
 
-// GET endpoint to fetch orders
-export async function GET() {
-    return NextResponse.json(orders);
+  const body = await req.json();
+
+  // Expect body like: { instruments: [{ token, segment }], quote_type }
+  const payload = {
+    instrument_tokens: body.instruments.map((x: any) => ({
+      instrument_token: x.token,
+      exchange_segment: x.segment,
+    })),
+    quote_type: body.quote_type || '',
+  };
+
+  try {
+    const data = await getQuotes(session, payload);
+    return NextResponse.json(data);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
 }
