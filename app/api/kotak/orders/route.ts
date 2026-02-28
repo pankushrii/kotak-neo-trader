@@ -1,9 +1,9 @@
-// app/api/kotak/quotes/route.ts
+// app/api/kotak/orders/route.ts
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { loadSession } from '@/lib/session';
-import { getQuotes } from '@/lib/kotakNeoClient';
+import { placeOrder } from '@/lib/kotakNeoClient';
 
 export async function POST(req: NextRequest) {
   const session = loadSession();
@@ -13,18 +13,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
-  // Expect body like: { instruments: [{ token, segment }], quote_type }
-  const payload = {
-    instrument_tokens: body.instruments.map((x: any) => ({
-      instrument_token: x.token,
-      exchange_segment: x.segment,
-    })),
-    quote_type: body.quote_type || '',
-  };
-
+  // Shape of body should match PlaceOrderPayload
   try {
-    const data = await getQuotes(session, payload);
-    return NextResponse.json(data);
+    const resp = await placeOrder(session, body);
+    return NextResponse.json(resp);
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
