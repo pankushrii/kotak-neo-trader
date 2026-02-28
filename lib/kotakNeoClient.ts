@@ -1,101 +1,78 @@
-import axios, { AxiosInstance } from 'axios'
-import { KotakSession, KotakQuote, KotakOrder, KotakPosition } from '@/types/kotak'
+// lib/kotakNeoClient.ts
+export type NeoEnvironment = 'uat' | 'prod';
 
-class KotakNeoClient {
-  private client: AxiosInstance
-
-  constructor() {
-    this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_KOTAK_API_URL,
-      timeout: 10000,
-    })
-  }
-
-  async createSession(credentials: {
-    clientId: string
-    totp: string
-    mpin: string
-  }): Promise<KotakSession> {
-    try {
-      const response = await this.client.post('/session/login', {
-        clientId: credentials.clientId,
-        totpNumber: credentials.totp,
-        mPin: credentials.mpin,
-      })
-
-      return {
-        token: response.data.token,
-        userId: response.data.userId,
-        expiresAt: response.data.expiresAt,
-      }
-    } catch (error) {
-      throw new Error('Failed to create session')
-    }
-  }
-
-  async validateSession(token: string): Promise<boolean> {
-    try {
-      const response = await this.client.get('/session/validate', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      })
-      return response.status === 200
-    } catch (error) {
-      return false
-    }
-  }
-
-  async getQuotes(token: string, symbols: string[]): Promise<KotakQuote[]> {
-    try {
-      const response = await this.client.post(
-        '/quotes',
-        { symbols },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
-      return response.data.quotes || []
-    } catch (error) {
-      throw new Error('Failed to fetch quotes')
-    }
-  }
-
-  async placeOrder(
-    token: string,
-    orderData: any
-  ): Promise<KotakOrder> {
-    try {
-      const response = await this.client.post(
-        '/orders/place',
-        orderData,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
-      return response.data
-    } catch (error) {
-      throw new Error('Failed to place order')
-    }
-  }
-
-  async getOrders(token: string): Promise<KotakOrder[]> {
-    try {
-      const response = await this.client.get(
-        '/orders',
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
-      return response.data.orders || []
-    } catch (error) {
-      throw new Error('Failed to fetch orders')
-    }
-  }
-
-  async getPositions(token: string): Promise<KotakPosition[]> {
-    try {
-      const response = await this.client.get(
-        '/positions',
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
-      return response.data.positions || []
-    } catch (error) {
-      throw new Error('Failed to fetch positions')
-    }
-  }
+export interface NeoSession {
+  baseUrl: string;
+  tradingToken: string;
+  tradingSid: string;
+  // If your Notion doc mentions server_id or similar, add it here.
 }
 
-export const kotakNeoClient = new KotakNeoClient()
+export interface PlaceOrderPayload {
+  exchange_segment: string;
+  product: string;
+  quantity: number;
+  trading_symbol: string;
+  order_type: 'MARKET' | 'LIMIT'; // extend as per docs
+  price?: number;
+  // ...other fields from Kotak Notion doc
+}
+
+// Generic helper
+async function neoRequest<T>(
+  session: NeoSession,
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${session.baseUrl}${path}`;
+
+  // TODO: Map these to the exact headers / auth schema from Kotak docs.
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+    // 'trading-token': session.tradingToken,
+    // 'sid': session.tradingSid,
+  };
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Neo API error ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function placeOrder(
+  session: NeoSession,
+  payload: PlaceOrderPayload
+) {
+  // As per official docs: {BASE_URL}/quick/order/rule/ms/place.[web:4]
+  return neoRequest<any>(session, '/quick/order/rule/ms/place', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getPositions(session: NeoSession) {
+  // The Python SDK exposes client.positions(); check Notion/SDK to map to HTTP path.[web:3][web:10]
+  return neoRequest<any>(session, '/positions', {
+    method: 'GET',
+  });
+}
+
+export interface QuoteRequest {
+  instrument_tokens: { instrument_token: string; exchange_segment: string }[];
+  quote_type?: string; // '', 'ltp', 'ohlc', 'market_depth', etc.[web:6]
+}
+
+export async function getQuotes(
+  session: NeoSession,
+  body: QuoteRequest
+) {
+  // The Quotes API accepts instrument_tokens and quote_type; exact REST path is from docs.[web:6]
+  return neoRequest<any>(session, '/quotes', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
