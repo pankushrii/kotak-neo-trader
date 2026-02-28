@@ -1,44 +1,27 @@
-// Session utilities for managing Kotak trading sessions
+// lib/session.ts
+import { cookies } from 'next/headers';
+import type { NeoSession } from './kotakNeoClient';
 
-export interface SessionData {
-  token: string
-  userId: string
-  expiresAt: string
+const COOKIE_NAME = 'neo_session';
+
+export function saveSession(session: NeoSession) {
+  const cookieStore = cookies();
+  cookieStore.set(COOKIE_NAME, JSON.stringify(session), {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 6 * 60 * 60, // 6 hours – adjust to token TTL
+  });
 }
 
-const SESSION_STORAGE_KEY = 'kotak_session'
-
-export const sessionManager = {
-  saveSession(data: SessionData): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data))
-    }
-  },
-
-  getSession(): SessionData | null {
-    if (typeof window !== 'undefined') {
-      const data = localStorage.getItem(SESSION_STORAGE_KEY)
-      return data ? JSON.parse(data) : null
-    }
-    return null
-  },
-
-  clearSession(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(SESSION_STORAGE_KEY)
-    }
-  },
-
-  isSessionValid(): boolean {
-    const session = this.getSession()
-    if (!session) return false
-
-    const expiresAt = new Date(session.expiresAt)
-    return expiresAt > new Date()
-  },
-
-  getToken(): string | null {
-    const session = this.getSession()
-    return session?.token || null
-  },
+export function loadSession(): NeoSession | null {
+  const cookieStore = cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as NeoSession;
+  } catch {
+    return null;
+  }
 }
