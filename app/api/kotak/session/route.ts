@@ -1,61 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { kotakNeoClient } from '@/lib/kotakNeoClient'
+// app/api/kotak/session/route.ts
+export const runtime = 'nodejs';
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { clientId, totp, mpin } = body
+import { NextRequest, NextResponse } from 'next/server';
+import { saveSession } from '@/lib/session';
+import type { NeoSession } from '@/lib/kotakNeoClient';
 
-    if (!clientId || !totp || !mpin) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
-    }
+export async function POST(req: NextRequest) {
+  const body = await req.json();
 
-    // Create Kotak session
-    const session = await kotakNeoClient.createSession({
-      clientId,
-      totp,
-      mpin,
-    })
+  // Example shape – align this to your Notion doc:
+  // { ucc, totp, mpin } or maybe pre-generated TRADING_TOKEN/SID
+  // const { ucc, totp, mpin } = body;
 
-    return NextResponse.json({
-      token: session.token,
-      userId: session.userId,
-      expiresAt: session.expiresAt,
-    })
-  } catch (error) {
-    console.error('Session creation error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create session' },
-      { status: 500 }
-    )
-  }
-}
+  // TODO: Call Kotak's login + TOTP APIs here, using consumer_key and env
+  // from process.env to obtain baseUrl, tradingToken, tradingSid.
 
-export async function GET(request: NextRequest) {
-  try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
+  const session: NeoSession = {
+    baseUrl: process.env.NEO_BASE_URL!,    // or derive from API response
+    tradingToken: process.env.NEO_TRADING_TOKEN!,
+    tradingSid: process.env.NEO_TRADING_SID!,
+  };
 
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+  saveSession(session);
 
-    const sessionValid = await kotakNeoClient.validateSession(token)
-
-    return NextResponse.json({
-      valid: sessionValid,
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error('Session validation error:', error)
-    return NextResponse.json(
-      { error: 'Failed to validate session' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json({ ok: true });
 }
